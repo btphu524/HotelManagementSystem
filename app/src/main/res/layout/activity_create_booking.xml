@@ -52,7 +52,7 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- 2. Chọn khách sạn -->
+        <!-- 2. Chọn khách sạn → ĐÃ CHUYỂN THÀNH SPINNER ĐẸP! -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -73,12 +73,11 @@
                     android:textSize="17sp"
                     android:textStyle="bold" />
 
-                <androidx.recyclerview.widget.RecyclerView
-                    android:id="@+id/rvHotels"
+                <Spinner
+                    android:id="@+id/spinnerHotels"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:nestedScrollingEnabled="false" />
+                    android:layout_marginTop="8dp" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
@@ -156,22 +155,44 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="4. Chọn phòng"
-            android:textSize="17sp"
-            android:textStyle="bold" />
+            android:text="4. Chọn phòng trống"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="#1A237E"
+            android:layout_marginTop="20dp"
+            android:layout_marginBottom="8dp" />
 
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/rvAvailableRooms"
+        <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:nestedScrollingEnabled="false"
-            android:layout_marginVertical="12dp" />
+            android:layout_marginBottom="20dp"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="8dp"
+            app:cardBackgroundColor="#FAFAFA">
+
+            <ScrollView
+                android:id="@+id/scrollRooms"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:maxHeight="480dp"
+                android:scrollbars="vertical"
+                android:fadeScrollbars="false">
+
+                <LinearLayout
+                    android:id="@+id/containerRooms"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="8dp" />
+
+            </ScrollView>
+        </com.google.android.material.card.MaterialCardView>
 
         <!-- 5. Dịch vụ -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="16dp"
+            android:layout_marginVertical="16dp"
             app:cardCornerRadius="12dp"
             app:cardElevation="6dp">
 
@@ -184,7 +205,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="5. Dịch vụ đi kèm"
+                    android:text="5. Dịch vụ đi kèm (tùy chọn)"
                     android:textSize="17sp"
                     android:textStyle="bold" />
 
@@ -197,7 +218,7 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- 6. HÌNH THỨC THANH TOÁN – MỚI THÊM -->
+        <!-- 6. Hình thức thanh toán -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -225,27 +246,9 @@
                     android:orientation="vertical"
                     android:layout_marginTop="12dp">
 
-                    <RadioButton
-                        android:id="@+id/rbCash"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="Thanh toán tiền mặt tại quầy (trả sau)"
-                        android:textSize="16sp" />
-
-                    <RadioButton
-                        android:id="@+id/rbCard"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="Thanh toán bằng thẻ tín dụng"
-                        android:textSize="16sp" />
-
-                    <RadioButton
-                        android:id="@+id/rbOnline"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="Thanh toán online (Momo, ZaloPay, VNPay...)"
-                        android:textSize="16sp"
-                        android:checked="true" />
+                    <RadioButton android:id="@+id/rbCash"    android:text="Thanh toán tiền mặt tại quầy" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="16sp"/>
+                    <RadioButton android:id="@+id/rbCard"    android:text="Thanh toán bằng thẻ tín dụng" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="16sp"/>
+                    <RadioButton android:id="@+id/rbOnline"  android:text="Thanh toán online (Momo, ZaloPay...)" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="16sp" android:checked="true"/>
                 </RadioGroup>
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
@@ -286,7 +289,7 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- Nút đặt phòng -->
+        <!-- Nút xác nhận -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnConfirmBooking"
             android:layout_width="match_parent"

@@ -2,13 +2,19 @@ package com.example.hotelmanagementsystem;
 
 import static java.sql.DriverManager.getConnection;
 
+import android.util.Log;
+
+import com.example.hotelmanagementsystem.form2.GuestLoginResult;
+import com.example.hotelmanagementsystem.form2.Hotel;
+import com.example.hotelmanagementsystem.form2.HotelService;
+import com.example.hotelmanagementsystem.form2.Room;
+
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Date;
 import java.sql.Types;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
@@ -18,9 +24,9 @@ import java.util.logging.Logger;
 import org.mindrot.jbcrypt.BCrypt;
 public class DatabaseHelper {
     private static final Logger LOGGER = Logger.getLogger(DatabaseHelper.class.getName());
-    private static final String DB_URL = "jdbc:postgresql://192.168.0.103:5432/Hotel_Management_DB";
-    private static final String DB_USER = "postgres";
-    private static final String DB_PASS = "123456";
+    public static final String DB_URL = "jdbc:postgresql://192.168.0.103:5432/Hotel_Management_DB";
+    public static final String DB_USER = "postgres";
+    public static final String DB_PASS = "123456";
 
     private Connection connect() throws SQLException {
         try {
@@ -166,7 +172,7 @@ public class DatabaseHelper {
                 ") VALUES (\n" +
                 "    NOW(), ?, ?, ?,\n" +
                 "    ?, ?, ?,\n" +
-                "    ?, ?, 'confirmed'\n" +
+                "    ?, ?, 'pending'\n" +
                 ") RETURNING booking_id";
 
         try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASS)) {
@@ -178,8 +184,8 @@ public class DatabaseHelper {
             try (PreparedStatement ps = conn.prepareStatement(insertBookingSQL)) {
                 long nights = ChronoUnit.DAYS.between(checkIn, checkOut);
                 ps.setLong(1, nights);
-                ps.setDate(2, java.sql.Date.valueOf(checkIn));                    // check_in_date
-                ps.setDate(3, java.sql.Date.valueOf(checkOut));                   // check_out_date (ngày checkout khách rời đi)
+                ps.setDate(2, java.sql.Date.valueOf(checkIn.toString()));                    // check_in_date
+                ps.setDate(3, java.sql.Date.valueOf(checkOut.toString()));                   // check_out_date (ngày checkout khách rời đi)
                 ps.setString(4, paymentType);
                 ps.setInt(5, selectedRoomIds.size());
                 ps.setBigDecimal(6, totalAmount);
@@ -237,7 +243,8 @@ public class DatabaseHelper {
         }
     }
 
-    private static BigDecimal calculateTotalAmount(Connection conn,
+    // 1. calculateTotalAmount – đã sửa cho Java 11
+    public static BigDecimal calculateTotalAmount(Connection conn,
                                                    List<Integer> roomIds,
                                                    List<Integer> serviceIds,
                                                    LocalDate checkIn,
@@ -245,7 +252,6 @@ public class DatabaseHelper {
 
         BigDecimal total = BigDecimal.ZERO;
 
-        // Tiền phòng + discount theo mùa
         String roomSQL = "SELECT rt.room_cost, COALESCE(d.discount_rate, 0) AS discount_rate " +
                 "FROM hotel.rooms r " +
                 "JOIN hotel.room_type rt ON r.room_type_id = rt.room_type_id " +
@@ -255,7 +261,7 @@ public class DatabaseHelper {
 
         try (PreparedStatement ps = conn.prepareStatement(roomSQL)) {
             for (int roomId : roomIds) {
-                ps.setDate(1, Date.valueOf(checkIn));
+                ps.setDate(1, java.sql.Date.valueOf(checkIn.toString()));
                 ps.setInt(2, roomId);
                 try (ResultSet rs = ps.executeQuery()) {
                     if (rs.next()) {
@@ -269,7 +275,6 @@ public class DatabaseHelper {
             }
         }
 
-        // Tiền dịch vụ
         if (serviceIds != null && !serviceIds.isEmpty()) {
             String svcSQL = "SELECT service_cost FROM hotel.hotel_services WHERE service_id = ? AND hotel_id = ?";
             try (PreparedStatement ps = conn.prepareStatement(svcSQL)) {
@@ -288,31 +293,31 @@ public class DatabaseHelper {
         return total;
     }
 
-    // Lấy phòng trống (dùng cho RecyclerView)
+    // 2. getAvailableRooms – đã sửa cho Java 11
     public static List<Room> getAvailableRooms(int hotelId, LocalDate checkIn, LocalDate checkOut) {
         List<Room> list = new ArrayList<>();
-        String sql = "SELECT r.room_id, r.room_number, rt.room_type_name, rt.room_cost, " +
-                "COALESCE(d.discount_rate, 0) AS discount_rate " +
+
+        String sql = "SELECT DISTINCT r.room_id, r.room_number, rt.room_type_name, rt.room_cost " +
                 "FROM hotel.rooms r " +
                 "JOIN hotel.room_type rt ON r.room_type_id = rt.room_type_id " +
-                "LEFT JOIN hotel.room_rate_discount d ON rt.room_type_id = d.room_type_id " +
-                "  AND EXTRACT(MONTH FROM ?::date) BETWEEN d.start_month AND d.end_month " +
-                "WHERE r.hotel_id = ? AND r.status = 'available' " +
+                "WHERE r.hotel_id = ? " +
+                "  AND r.status = 'available' " +
                 "  AND r.room_id NOT IN ( " +
-                "    SELECT rb.room_id FROM hotel.rooms_booked rb " +
+                "    SELECT rb.room_id " +
+                "    FROM hotel.rooms_booked rb " +
                 "    JOIN hotel.bookings b ON rb.booking_id = b.booking_id " +
                 "    WHERE b.status NOT IN ('cancelled', 'checked_out') " +
-                "      AND b.check_in_date < ? AND b.check_out_date > ? " +
+                "      AND b.check_in_date::date < ? " +
+                "      AND b.check_out_date::date > ? " +
                 "  ) " +
                 "ORDER BY r.room_number";
 
         try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASS);
              PreparedStatement ps = conn.prepareStatement(sql)) {
 
-            ps.setDate(1, Date.valueOf(checkIn));
-            ps.setInt(2, hotelId);
-            ps.setDate(3, Date.valueOf(checkOut));
-            ps.setDate(4, Date.valueOf(checkIn));
+            ps.setInt(1, hotelId);
+            ps.setObject(2, checkOut);     // check_out_date > checkIn bạn chọn
+            ps.setObject(3, checkIn);      // check_in_date < checkOut bạn chọn
 
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
@@ -321,7 +326,33 @@ public class DatabaseHelper {
                             rs.getString("room_number"),
                             rs.getString("room_type_name"),
                             rs.getBigDecimal("room_cost"),
-                            rs.getDouble("discount_rate")
+                            0.0
+                    ));
+                }
+            }
+        } catch (Exception e) {
+            Log.e("DB", "Lỗi lấy phòng trống", e);
+        }
+        return list;
+    }
+
+    // 3. getServicesByHotel – đã sửa cho Java 11
+    public static List<HotelService> getServicesByHotel(int hotelId) {
+        List<HotelService> list = new ArrayList<>();
+        String sql = "SELECT service_id, service_name, service_cost " +
+                "FROM hotel.hotel_services " +
+                "WHERE hotel_id = ? " +
+                "ORDER BY service_name";
+
+        try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASS);
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, hotelId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    list.add(new HotelService(
+                            rs.getInt("service_id"),
+                            rs.getString("service_name"),
+                            rs.getBigDecimal("service_cost")
                     ));
                 }
             }
@@ -329,5 +360,45 @@ public class DatabaseHelper {
             e.printStackTrace();
         }
         return list;
+    }
+
+    // === THÊM VÀO DatabaseHelper.java ===
+// Hàm lấy danh sách khách sạn theo chuỗi (chain)
+    public static List<Hotel> getHotelsByChain(int chainId) {
+        List<Hotel> list = new ArrayList<>();
+        String sql = "SELECT h.hotel_id, h.hotel_name, h.star_rating " +
+                "FROM hotel.hotel h " +
+                "WHERE h.hotel_chain_id = ? " +
+                "ORDER BY h.hotel_name";
+
+        try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASS);
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setInt(1, chainId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    list.add(new Hotel(
+                            rs.getInt("hotel_id"),
+                            rs.getString("hotel_name"),
+                            chainId,
+                            getChainName(chainId), // <-- hàm này đã sửa dưới đây
+                            rs.getInt("star_rating")
+                    ));
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return list;
+    }
+
+    // === HÀM getChainName() – ĐÃ SỬA CHO JAVA 11 (không dùng switch expression) ===
+    private static String getChainName(int chainId) {
+        if (chainId == 1) return "Best Western";
+        if (chainId == 2) return "China Town";
+        if (chainId == 3) return "Elite";
+        if (chainId == 4) return "Cosmopolitan";
+        if (chainId == 5) return "Prestige";
+        return "Unknown Chain";
     }
 }

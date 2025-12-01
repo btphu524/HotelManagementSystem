@@ -1,4 +1,4 @@
-package com.example.hotelmanagementsystem;
+package com.example.hotelmanagementsystem.form1;
 
 import android.content.Intent;
 import android.database.Cursor;
@@ -13,6 +13,8 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.example.hotelmanagementsystem.DatabaseHelper;
+import com.example.hotelmanagementsystem.R;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.textfield.TextInputEditText;
 

@@ -5,7 +5,8 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.widget.Button;
 
-import org.mindrot.jbcrypt.BCrypt;
+import com.example.hotelmanagementsystem.form1.CreateGuestActivity;
+import com.example.hotelmanagementsystem.form2.LoginGuestActivity;
 
 public class MainActivity extends AppCompatActivity {
 

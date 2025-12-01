@@ -19,13 +19,13 @@
         android:theme="@style/Theme.HotelManagementSystem"
         tools:targetApi="31" >
         <activity
-            android:name=".LoginGuestActivity"
+            android:name=".form2.LoginGuestActivity"
             android:exported="false" />
         <activity
             android:name=".RegisterGuestActivity"
             android:exported="false" />
         <activity
-            android:name=".CreateBookingActivity"
+            android:name=".form2.CreateBookingActivity"
             android:exported="false" />
         <activity
             android:name=".MainActivity"
@@ -37,7 +37,7 @@
             </intent-filter>
         </activity>
         <activity
-            android:name=".CreateGuestActivity"
+            android:name=".form1.CreateGuestActivity"
             android:exported="false" />
     </application>
 

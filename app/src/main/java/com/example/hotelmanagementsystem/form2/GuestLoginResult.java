@@ -1,4 +1,4 @@
-package com.example.hotelmanagementsystem;
+package com.example.hotelmanagementsystem.form2;
 
 public class GuestLoginResult {
     public final int guestId;

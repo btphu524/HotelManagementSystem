@@ -1,10 +1,13 @@
-package com.example.hotelmanagementsystem; // sửa đúng package
+package com.example.hotelmanagementsystem.form2; // sửa đúng package
 
 import androidx.appcompat.app.AppCompatActivity;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.widget.Toast;
+
+import com.example.hotelmanagementsystem.DatabaseHelper;
+import com.example.hotelmanagementsystem.R;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.textfield.TextInputEditText;
 
