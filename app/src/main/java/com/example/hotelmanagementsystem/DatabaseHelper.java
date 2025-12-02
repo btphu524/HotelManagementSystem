@@ -4,7 +4,7 @@ import static java.sql.DriverManager.getConnection;
 
 import android.util.Log;
 
-import com.example.hotelmanagementsystem.form2.GuestLoginResult;
+import com.example.hotelmanagementsystem.form2.Guest;
 import com.example.hotelmanagementsystem.form2.Hotel;
 import com.example.hotelmanagementsystem.form2.HotelService;
 import com.example.hotelmanagementsystem.form2.Room;
@@ -17,6 +17,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
@@ -106,7 +107,7 @@ public class DatabaseHelper {
         return -1; // Thất bại
     }
 
-    public static GuestLoginResult loginAndGetGuestInfo(String username, String password) {
+    public static Guest loginAndGetGuestInfo(String username, String password) {
         String sql = "SELECT ag.guest_id, " +
                 "g.guest_first_name, " +
                 "g.guest_last_name, " +
@@ -126,7 +127,7 @@ public class DatabaseHelper {
             if (rs.next()) {
                 String hashed = rs.getString("password_hash");
                 if (BCrypt.checkpw(password, hashed)) {
-                    return new GuestLoginResult(
+                    return new Guest(
                             rs.getInt("guest_id"),
                             rs.getString("guest_first_name"),
                             rs.getString("guest_last_name"),
@@ -143,66 +144,69 @@ public class DatabaseHelper {
     }
 
     /**
-     * Tạo booking mới – trả về booking_id nếu thành công, -1 nếu thất bại
+     * Tạo booking mới – HỖ TRỢ NGÀY + GIỜ CHÍNH XÁC
      */
     public static long createBooking(
             int guestId,
             int hotelId,
-            LocalDate checkIn,
-            LocalDate checkOut,
+            LocalDateTime checkInDateTime,
+            LocalDateTime checkOutDateTime,
             List<Integer> selectedRoomIds,
             List<Integer> selectedServiceIds,
             String paymentType) {
 
-        if (selectedRoomIds == null || selectedRoomIds.isEmpty() || checkIn.isAfter(checkOut) || checkIn.isBefore(LocalDate.now())) {
-            return -1;
-        }
+        if (selectedRoomIds == null || selectedRoomIds.isEmpty()) return -1;
+        if (checkInDateTime.isAfter(checkOutDateTime)) return -1;
+        if (checkInDateTime.isBefore(LocalDateTime.now().minusHours(2))) return -1;
 
-        try {
-            Class.forName("org.postgresql.Driver");
-        } catch (ClassNotFoundException e) {
-            e.printStackTrace();
-            return -1;
-        }
-
-        String insertBookingSQL = "INSERT INTO hotel.bookings (\n" +
-                "    booking_date, duration_of_stay, check_in_date, check_out_date,\n" +
-                "    booking_payment_type, total_rooms_booked, total_amount,\n" +
-                "    hotel_id, guest_id, status\n" +
-                ") VALUES (\n" +
-                "    NOW(), ?, ?, ?,\n" +
-                "    ?, ?, ?,\n" +
-                "    ?, ?, 'pending'\n" +
+        String sql = "INSERT INTO hotel.bookings (" +
+                "booking_date, duration_of_stay, check_in_date, check_out_date, " +
+                "booking_payment_type, total_rooms_booked, total_amount, " +
+                "hotel_id, guest_id, emp_id, status" +
+                ") VALUES (" +
+                "NOW(), ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'pending'" +
                 ") RETURNING booking_id";
 
         try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASS)) {
             conn.setAutoCommit(false);
 
-            BigDecimal totalAmount = calculateTotalAmount(conn, selectedRoomIds, selectedServiceIds, checkIn, hotelId);
+            // Tính số đêm
+            long nights = ChronoUnit.DAYS.between(checkInDateTime.toLocalDate(), checkOutDateTime.toLocalDate());
+            if (nights <= 0) nights = 1;
 
-            long bookingId;
-            try (PreparedStatement ps = conn.prepareStatement(insertBookingSQL)) {
-                long nights = ChronoUnit.DAYS.between(checkIn, checkOut);
-                ps.setLong(1, nights);
-                ps.setDate(2, java.sql.Date.valueOf(checkIn.toString()));                    // check_in_date
-                ps.setDate(3, java.sql.Date.valueOf(checkOut.toString()));                   // check_out_date (ngày checkout khách rời đi)
-                ps.setString(4, paymentType);
-                ps.setInt(5, selectedRoomIds.size());
-                ps.setBigDecimal(6, totalAmount);
-                ps.setInt(7, hotelId);
-                ps.setInt(8, guestId);
+            // Tính tiền
+            BigDecimal totalOneNight = calculateTotalAmount(conn, selectedRoomIds, selectedServiceIds,
+                    checkInDateTime.toLocalDate(), hotelId);
+            BigDecimal totalAmount = totalOneNight.multiply(BigDecimal.valueOf(nights));
+
+            LocalDateTime in = checkInDateTime.withSecond(0).withNano(0);
+            LocalDateTime out = checkOutDateTime.withSecond(0).withNano(0);
+
+            long bookingId = -1;
+
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setLong(1, nights);                    // duration_of_stay
+                ps.setObject(2, in);                      // check_in_date
+                ps.setObject(3, out);                     // check_out_date
+                ps.setString(4, paymentType);             // booking_payment_type
+                ps.setInt(5, selectedRoomIds.size());     // total_rooms_booked
+                ps.setBigDecimal(6, totalAmount);         // total_amount
+                ps.setInt(7, hotelId);                    // hotel_id
+                ps.setInt(8, guestId);                    // guest_id
+                // emp_id = NULL và status = 'pending' đã hardcode trong SQL
 
                 ResultSet rs = ps.executeQuery();
-                if (!rs.next()) {
+                if (rs.next()) {
+                    bookingId = rs.getLong(1);
+                } else {
                     conn.rollback();
                     return -1;
                 }
-                bookingId = rs.getLong(1);
             }
 
-            // rooms_booked
-            String sqlRoom = "INSERT INTO hotel.rooms_booked (booking_id, room_id) VALUES (?, ?)";
-            try (PreparedStatement ps = conn.prepareStatement(sqlRoom)) {
+            // === GẮN PHÒNG ===
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "INSERT INTO hotel.rooms_booked (booking_id, room_id) VALUES (?, ?)")) {
                 for (int roomId : selectedRoomIds) {
                     ps.setLong(1, bookingId);
                     ps.setInt(2, roomId);
@@ -211,10 +215,10 @@ public class DatabaseHelper {
                 ps.executeBatch();
             }
 
-            // services
+            // === GẮN DỊCH VỤ ===
             if (selectedServiceIds != null && !selectedServiceIds.isEmpty()) {
-                String sqlService = "INSERT INTO hotel.hotel_services_used_by_guests (service_id, booking_id) VALUES (?, ?)";
-                try (PreparedStatement ps = conn.prepareStatement(sqlService)) {
+                try (PreparedStatement ps = conn.prepareStatement(
+                        "INSERT INTO hotel.hotel_services_used_by_guests (service_id, booking_id) VALUES (?, ?)")) {
                     for (int sid : selectedServiceIds) {
                         ps.setInt(1, sid);
                         ps.setLong(2, bookingId);
@@ -224,9 +228,9 @@ public class DatabaseHelper {
                 }
             }
 
-            // update room status
-            String sqlUpdate = "UPDATE hotel.rooms SET status = 'reserved' WHERE room_id = ?";
-            try (PreparedStatement ps = conn.prepareStatement(sqlUpdate)) {
+            // === CẬP NHẬT TRẠNG THÁI PHÒNG ===
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "UPDATE hotel.rooms SET status = 'reserved' WHERE room_id = ? AND status = 'available'")) {
                 for (int roomId : selectedRoomIds) {
                     ps.setInt(1, roomId);
                     ps.addBatch();
@@ -237,8 +241,9 @@ public class DatabaseHelper {
             conn.commit();
             return bookingId;
 
-        } catch (SQLException e) {
+        } catch (Exception e) {
             e.printStackTrace();
+            System.err.println("BOOKING FAILED: " + e.getMessage());
             return -1;
         }
     }
@@ -297,27 +302,31 @@ public class DatabaseHelper {
     public static List<Room> getAvailableRooms(int hotelId, LocalDate checkIn, LocalDate checkOut) {
         List<Room> list = new ArrayList<>();
 
-        String sql = "SELECT DISTINCT r.room_id, r.room_number, rt.room_type_name, rt.room_cost " +
+        String sql = "SELECT DISTINCT r.room_id, r.room_number, rt.room_type_name, rt.room_cost, " +
+                "COALESCE(d.discount_rate, 0) AS discount_rate " +
                 "FROM hotel.rooms r " +
                 "JOIN hotel.room_type rt ON r.room_type_id = rt.room_type_id " +
+                "LEFT JOIN hotel.room_rate_discount d " +
+                "  ON rt.room_type_id = d.room_type_id " +
+                " AND EXTRACT(MONTH FROM ?::date) BETWEEN d.start_month AND d.end_month " +
                 "WHERE r.hotel_id = ? " +
-                "  AND r.status = 'available' " +
                 "  AND r.room_id NOT IN ( " +
                 "    SELECT rb.room_id " +
                 "    FROM hotel.rooms_booked rb " +
                 "    JOIN hotel.bookings b ON rb.booking_id = b.booking_id " +
                 "    WHERE b.status NOT IN ('cancelled', 'checked_out') " +
-                "      AND b.check_in_date::date < ? " +
-                "      AND b.check_out_date::date > ? " +
+                "      AND b.check_in_date < ? " +
+                "      AND b.check_out_date > ? " +
                 "  ) " +
                 "ORDER BY r.room_number";
 
         try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASS);
              PreparedStatement ps = conn.prepareStatement(sql)) {
 
-            ps.setInt(1, hotelId);
-            ps.setObject(2, checkOut);     // check_out_date > checkIn bạn chọn
-            ps.setObject(3, checkIn);      // check_in_date < checkOut bạn chọn
+            ps.setDate(1, java.sql.Date.valueOf(checkIn.toString()));   // cho discount theo tháng
+            ps.setInt(2, hotelId);
+            ps.setDate(3, java.sql.Date.valueOf(checkOut.toString())); // check_out_date > checkIn
+            ps.setDate(4, java.sql.Date.valueOf(checkIn.toString()));  // check_in_date < checkOut
 
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
@@ -326,7 +335,7 @@ public class DatabaseHelper {
                             rs.getString("room_number"),
                             rs.getString("room_type_name"),
                             rs.getBigDecimal("room_cost"),
-                            0.0
+                            rs.getDouble("discount_rate")  // để hiển thị giảm giá nếu có
                     ));
                 }
             }
@@ -339,10 +348,10 @@ public class DatabaseHelper {
     // 3. getServicesByHotel – đã sửa cho Java 11
     public static List<HotelService> getServicesByHotel(int hotelId) {
         List<HotelService> list = new ArrayList<>();
-        String sql = "SELECT service_id, service_name, service_cost " +
+        String sql = "SELECT service_id, service_name, service_cost, is_common " +
                 "FROM hotel.hotel_services " +
-                "WHERE hotel_id = ? " +
-                "ORDER BY service_name";
+                "WHERE hotel_id = ? OR is_common = true " +
+                "ORDER BY is_common DESC, service_name";
 
         try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASS);
              PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -352,7 +361,8 @@ public class DatabaseHelper {
                     list.add(new HotelService(
                             rs.getInt("service_id"),
                             rs.getString("service_name"),
-                            rs.getBigDecimal("service_cost")
+                            rs.getBigDecimal("service_cost"),
+                            rs.getBoolean("is_common")
                     ));
                 }
             }

@@ -40,7 +40,7 @@ public class LoginGuestActivity extends AppCompatActivity {
         btnLogin.setEnabled(false);
 
         new Thread(() -> {
-            GuestLoginResult result = DatabaseHelper.loginAndGetGuestInfo(email, password);
+            Guest result = DatabaseHelper.loginAndGetGuestInfo(email, password);
 
             runOnUiThread(() -> {
                 btnLogin.setEnabled(true);
